@@ -241,14 +241,13 @@ def add_product(new_product: NewProduct, response: Response):
     existing_names = [p['name'].lower() for p in products]
     if new_product.name.lower() in existing_names:
         response.status_code = status.HTTP_400_BAD_REQUEST
-        return {'error': 'Product with this name already exists'}
-    next_id = max(p['id'] for p in products) + 1
+        return {'error': 'Product with this name already exists'    next_id = max(p['id'] for p in products) + 1
     product = {
         'id':       next_id,
         'name':     new_product.name,
         'price':    new_product.price,
         'category': new_product.category,
-        'in_stock': new_product.in_stock,
+        'in_stock': new_product.in_stock
     }
     products.append(product)
     response.status_code = status.HTTP_201_CREATED
@@ -316,9 +315,16 @@ def place_order(order_data: OrderRequest):
     return {'message': 'Order placed successfully', 'order': order}
 
 
-@app.get('/orders')
-def get_all_orders():
-    return {'orders': orders, 'total_orders': len(orders)}
+@app.get("/orders")
+def get_orders():
+    total_revenue = sum(order["total_price"] for order in orders)
+
+    return {
+        "orders": orders,
+        "total": len(orders),
+        "total_revenue": total_revenue
+    }
+
 @app.get('/orders/page')
 def paginate_orders(
     page: int = Query(1, ge=1),
@@ -343,32 +349,45 @@ def paginate_orders(
 # ── Day 5 — Cart ──────────────────────────────────────────────────
 # fixed routes /cart/add and /cart/checkout BEFORE variable /cart/{product_id}
 
-@app.post('/cart/add')
-def add_to_cart(
-    product_id: int = Query(...),
-    quantity:   int = Query(1),
-):
-    product = find_product(product_id)
+@app.post("/cart/add")
+def add_to_cart(product_id: int, quantity: int = 1):
+
+    # find product
+    product = next((p for p in products if p["id"] == product_id), None)
+
+    # check product exists
     if not product:
-        return {'error': 'Product not found'}
-    if not product['in_stock']:
-        return {'error': f"{product['name']} is out of stock"}
+        return {"error": "Product not found"}
+
+    # check stock
+    if not product["in_stock"]:
+        return {"error": "Product out of stock"}
+
+    # check if already in cart
     for item in cart:
-        if item['product_id'] == product_id:
-            item['quantity'] += quantity
-            item['subtotal']  = calculate_total(product, item['quantity'])
-            return {'message': 'Cart updated', 'cart_item': item}
-    cart_item = {
-        'product_id':   product_id,
-        'product_name': product['name'],
-        'quantity':     quantity,
-        'unit_price':   product['price'],
-        'subtotal':     calculate_total(product, quantity),
+        if item["product_id"] == product_id:
+            item["quantity"] += quantity
+            item["subtotal"] = item["quantity"] * product["price"]
+            return {
+                "message": "Cart updated",
+                "item": item
+            }
+
+    # add new item
+    new_item = {
+        "product_id": product_id,
+        "name": product["name"],
+        "quantity": quantity,
+        "price": product["price"],
+        "subtotal": product["price"] * quantity
     }
-    cart.append(cart_item)
-    return {'message': 'Added to cart', 'cart_item': cart_item}
 
+    cart.append(new_item)
 
+    return {
+        "message": "Item added to cart",
+        "item": new_item
+    }
 @app.get('/cart')
 def view_cart():
     if not cart:
